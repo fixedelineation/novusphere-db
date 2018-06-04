@@ -1,0 +1,75 @@
+﻿<!DOCTYPE html>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title></title>
+</head>
+<body>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script>
+        function query_db(q) {
+            var url = "http://localhost:8099/api";
+            var data = JSON.stringify(q);
+            return new Promise((resolve, reject) => {
+                $.post(url, data)
+                .done(function (payload) {
+                    resolve(payload);
+                })
+                .fail(function (reason) {
+                    reject(reason);
+                });
+            });
+        }
+
+        class NovuspherePager {
+            constructor(pageSize, query) {
+                this._pageCount = -1;
+                this.currentPage = 0;
+                this.pageSize = pageSize;
+                this.query = query;
+            }
+            async getPageCount() {
+                if (this._pageCount == -1) {
+                    var count_query = {
+                        "count": "novusphere",
+                        "query": this.query.filter
+                    };
+
+                    var n = (await query_db(count_query)).n;
+                    this._pageCount = Math.ceil(n / this.pageSize);
+                }
+                return this._pageCount;
+            }
+            async get() {
+                this.query.skip = this.currentPage * this.pageSize;
+                this.query.limit = this.pageSize;
+                this.currentPage++;
+
+                var payload = await query_db(this.query);
+
+                return payload;
+            }
+            async hasMore() {
+                var count = await this.getPageCount();
+                return (this.currentPage < count);
+            }
+        }
+
+        (async function () {
+            var query = {
+                "find": "novusphere",
+                "filter": { "Name": { "$regex": ".+" } },
+                "maxTimeMS": 1
+            };
+            
+            var p = new NovuspherePager(2, query); // 2 results per page
+            while (await p.hasMore()) {
+                var payload = await p.get();
+                console.log(payload.cursor.firstBatch);
+            }
+
+        })();
+    </script>
+</body>
+</html>
