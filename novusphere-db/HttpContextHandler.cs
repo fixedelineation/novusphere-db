@@ -17,11 +17,13 @@ namespace Novusphere.Database
     {
         public HttpListenerRequest Request { get; private set; }
         public HttpListenerResponse Response { get; private set; }
+        public QuerySession Session { get; private set;}
 
-        public HttpContextHandler(HttpListenerContext context)
+        public HttpContextHandler(HttpListenerContext context, QuerySession session)
         {
             Request = context.Request;
             Response = context.Response;
+            Session = session;
         }
 
         public void Handle()
@@ -62,11 +64,7 @@ namespace Novusphere.Database
         {
             try
             {
-                var client = new MongoClient(Program.Config.MongoConnection);
-                var db = client.GetDatabase(Program.Config.MongoDatabase);
-                var command = new JsonCommand<BsonDocument>(GetPostContent());
-                var result = db.RunCommand<BsonDocument>(command);
-                
+                var result = Session.RunQuery(GetPostContent());
                 return Content(result.ToJson(new JsonWriterSettings() { OutputMode = JsonOutputMode.Strict }), "application/json");
             }
             catch (MongoCommandException ex)

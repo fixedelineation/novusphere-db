@@ -33,7 +33,8 @@
                 if (this._count == -1) {
                     var count_query = {
                         "count": "novusphere",
-                        "query": this.query.filter
+                        "query": this.query.filter,
+                        "maxTimeMS": this.query.maxTimeMS
                     };
 
                     var n = (await query_db(count_query)).n;
