@@ -24,34 +24,33 @@
 
         class NovuspherePager {
             constructor(pageSize, query) {
-                this._pageCount = -1;
+                this._count = -1;
                 this.currentPage = 0;
                 this.pageSize = pageSize;
                 this.query = query;
             }
-            async getPageCount() {
-                if (this._pageCount == -1) {
+            async getCount() {
+                if (this._count == -1) {
                     var count_query = {
                         "count": "novusphere",
                         "query": this.query.filter
                     };
 
                     var n = (await query_db(count_query)).n;
-                    this._pageCount = Math.ceil(n / this.pageSize);
+                    this._count = Math.ceil(n / this.pageSize);
                 }
-                return this._pageCount;
+                return this._count;
             }
-            async get() {
-                this.query.skip = this.currentPage * this.pageSize;
+            async getNext() {
+                return (await this.getAt(this.currentPage++));
+            }
+            async getAt(pageIndex) {
+                this.query.skip = pageIndex * this.pageSize;
                 this.query.limit = this.pageSize;
-                this.currentPage++;
-
-                var payload = await query_db(this.query);
-
-                return payload;
+                return (await query_db(this.query));
             }
             async hasMore() {
-                var count = await this.getPageCount();
+                var count = await this.getCount();
                 return (this.currentPage < count);
             }
         }
@@ -64,10 +63,15 @@
             };
             
             var p = new NovuspherePager(2, query); // 2 results per page
+
+            // iterate all pages
             while (await p.hasMore()) {
-                var payload = await p.get();
+                var payload = await p.getNext();
                 console.log(payload.cursor.firstBatch);
             }
+
+            // get a specific page at index 1
+            console.log(await p.getAt(1));
 
         })();
     </script>
