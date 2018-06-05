@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title></title>
+</head>
+<body>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script>
+        (function () {
+            var url = "http://localhost:8099/api";
+            var query = { // note config.json --> MongoDatabase must be set to "admin"
+                "sleep": {
+                    w: true,
+                    secs: 5
+                },
+                "maxTimeMS": 5000
+            };
+            $.post(url, JSON.stringify(query))
+                .done(function (data) {
+                    console.log(data);
+                })
+                .fail(function (reason) {
+                    console.log('Request failed');
+                    console.log(reason);
+                });
+        })();
+    </script>
+</body>
+</html>

@@ -12,11 +12,9 @@ namespace Novusphere.Database
 {
     public class QuerySession
     {
-        public const double QUERY_TIME_RATIO = 0.5; // allow 0.5s of query time every 1s
-
         private DateTime _lastQuery;
-        private double _allowedTimeMS;
 
+        public double AllowedTimeMS { get; private set; }
         public string Identifier { get; private set; }
         
         public QuerySession(string id)
@@ -35,21 +33,30 @@ namespace Novusphere.Database
         public BsonDocument RunQuery(string query)
         {
             var delta = Math.Min(60 * 1000, (DateTime.UtcNow - _lastQuery).TotalMilliseconds) * Program.Config.QueryTimeRatio;
-            var maxTimeMS = Math.Min(60 * 1000 * Program.Config.QueryTimeRatio, _allowedTimeMS + delta);
+            var maxTimeMS = Math.Min(60 * 1000 * Program.Config.QueryTimeRatio, AllowedTimeMS + delta);
             CheckTime(query, maxTimeMS);
           
             var beforeQuery = DateTime.UtcNow;
+            BsonDocument result;
 
-            var client = new MongoClient(Program.Config.MongoConnection);
-            var db = client.GetDatabase(Program.Config.MongoDatabase);
-            var command = new JsonCommand<BsonDocument>(query);
-            var result = db.RunCommand<BsonDocument>(command);
-
-            _lastQuery = DateTime.UtcNow;
-            _allowedTimeMS = maxTimeMS - ((_lastQuery - beforeQuery).TotalMilliseconds);
+            try
+            {
+                var client = new MongoClient(Program.Config.MongoConnection);
+                var db = client.GetDatabase(Program.Config.MongoDatabase);
+                var command = new JsonCommand<BsonDocument>(query);
+                result = db.RunCommand<BsonDocument>(command);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+            finally
+            {
+                _lastQuery = DateTime.UtcNow;
+                AllowedTimeMS = maxTimeMS - ((_lastQuery - beforeQuery).TotalMilliseconds);
+            }
             
-            result["$allowedTimeMS"] = (int)_allowedTimeMS;
-
+            result["allowedTimeMS"] = (int)AllowedTimeMS;
             return result;
         }
     }

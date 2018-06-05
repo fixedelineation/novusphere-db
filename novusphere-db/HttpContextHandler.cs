@@ -73,6 +73,7 @@ namespace Novusphere.Database
                 {
                     error = new
                     {
+                        allowedTimeMS = (int)Session.AllowedTimeMS,
                         type = ex.GetType().Name,
                         message = ex.Result["errmsg"],
                         code = ex.Result["code"],
@@ -87,6 +88,7 @@ namespace Novusphere.Database
                 {
                     error = new
                     {
+                        allowedTimeMS = (int)Session.AllowedTimeMS,
                         type = ex.GetType().Name,
                         message = ex.Message
                     }
