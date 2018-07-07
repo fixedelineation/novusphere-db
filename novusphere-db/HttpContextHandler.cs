@@ -32,6 +32,7 @@ namespace Novusphere.Database
             switch (path)
             {
                 case "/api": HandleAPI(); break;
+                case "/hello": HandleHello(); break;
                 default: Content("Unknown path request", "text/plain"); break;
             }
         }
@@ -58,6 +59,11 @@ namespace Novusphere.Database
         private HttpListenerResponse Json(object obj)
         {
             return Content(JsonConvert.SerializeObject(obj), "application/json");
+        }
+
+        private HttpListenerResponse HandleHello()
+        {
+            return Content("hello", "text/plain");
         }
 
         private HttpListenerResponse HandleAPI()

@@ -1,16 +1,20 @@
 ﻿using System;
 using System.IO;
-
+using System.Collections.Generic;
+using System.Reflection;
 using MongoDB.Driver;
 using MongoDB.Bson;
 using Newtonsoft.Json;
+using Novusphere.Shared;
 
 namespace Novusphere.Database
 {
     public static class Program
     {
-        public static Config Config { get; private set; }
+        public static PluginManager PluginManager { get; set; }
+        public static NovusphereConfig Config { get; private set; }
         public static HttpServer Http { get; private set; }
+        public static PluginManager ChainListener { get; private set;}
 
         static void MakeDirectory(string dir)
         {
@@ -23,13 +27,13 @@ namespace Novusphere.Database
             var fp = Path.Combine("data", "config.json");
             if (!File.Exists(fp))
             {
-                Config = new Config();
+                Config = new NovusphereConfig();
                 Config.SetDefault();
                 File.WriteAllText(fp, JsonConvert.SerializeObject(Config, Formatting.Indented));
             }
             else
             {
-                Config = JsonConvert.DeserializeObject<Config>(File.ReadAllText(fp));
+                Config = JsonConvert.DeserializeObject<NovusphereConfig>(File.ReadAllText(fp));
             }
         }
 
@@ -43,10 +47,17 @@ namespace Novusphere.Database
                 Console.WriteLine("\t{0}", uri);
         }
 
+        static void StartPlugins() 
+        {
+            PluginManager = new PluginManager(Config.Plugins);
+            PluginManager.Start();
+        }
+
         static void Main(string[] args)
         {
             MakeDirectory("data");
             LoadConfig();
+            StartPlugins();
             StartHttp();
 
             Console.ReadLine();

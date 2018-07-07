@@ -1,9 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.0</TargetFramework>
-    <RootNamespace>Novusphere.Database</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
@@ -12,14 +10,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Novusphere.EOS\Novusphere.EOS.csproj" />
     <ProjectReference Include="..\Novusphere.Shared\Novusphere.Shared.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="System.Web">
-      <HintPath>System.Web</HintPath>
-    </Reference>
   </ItemGroup>
 
 </Project>

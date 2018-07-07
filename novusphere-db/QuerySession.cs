@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Net;
-
+using System.Linq;
 using MongoDB.Driver;
 using MongoDB.Bson;
 using Newtonsoft.Json;
@@ -22,27 +22,42 @@ namespace Novusphere.Database
             this.Identifier = id;
         }
 
-        private void CheckTime(string query, double maxTimeMS) 
+        private void CheckTime(JToken q, double maxTimeMS) 
         {
-            JToken q = (JToken)JsonConvert.DeserializeObject(query);
             double q_maxTimeMS = q.Value<double?>("maxTimeMS") ?? -1;
             if (q_maxTimeMS < 0 || q_maxTimeMS > maxTimeMS)
                 throw new ArgumentException("Invalid maxTimeMS");
         }
 
+        private void CheckAllowed(JToken q)
+        {
+            var mongo = Program.Config.Mongo;
+            if (!mongo.Allowed.Any(name =>
+                    q[name] != null &&
+                    q[name].Value<string>() == mongo.Collection))
+            {
+                var error = "Query must be of commands " + string.Join(", ", mongo.Allowed) + " and value \"" + mongo.Collection + "\"";
+                throw new ArgumentException(error);
+            }
+        }
+
         public BsonDocument RunQuery(string query)
         {
+            JToken q = (JToken)JsonConvert.DeserializeObject(query);
+
+            CheckAllowed(q);
+
             var delta = Math.Min(60 * 1000, (DateTime.UtcNow - _lastQuery).TotalMilliseconds) * Program.Config.QueryTimeRatio;
             var maxTimeMS = Math.Min(60 * 1000 * Program.Config.QueryTimeRatio, AllowedTimeMS + delta);
-            CheckTime(query, maxTimeMS);
+            CheckTime(q, maxTimeMS);
           
             var beforeQuery = DateTime.UtcNow;
             BsonDocument result;
 
             try
             {
-                var client = new MongoClient(Program.Config.MongoConnection);
-                var db = client.GetDatabase(Program.Config.MongoDatabase);
+                var client = new MongoClient(Program.Config.Mongo.Connection);
+                var db = client.GetDatabase(Program.Config.Mongo.Database);
                 var command = new JsonCommand<BsonDocument>(query);
                 result = db.RunCommand<BsonDocument>(command);
             }
