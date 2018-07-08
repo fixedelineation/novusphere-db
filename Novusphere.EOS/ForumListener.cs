@@ -48,7 +48,7 @@ namespace Novusphere.EOS
         {
             if (_documents.Count > 0)
             {
-                Console.Write("Committing {0} documents... ", _documents.Count);
+                Console.Write("[{0}] Committing {1} documents... ", DateTime.Now, _documents.Count);
 
                 var command = new JsonCommand<BsonDocument>(JsonConvert.SerializeObject(new
                 {
