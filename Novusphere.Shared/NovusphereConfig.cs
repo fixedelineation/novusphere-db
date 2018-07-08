@@ -17,6 +17,7 @@ namespace Novusphere.Shared
             Mongo.SetDefault();
             UriPrefixes = new string[] { "http://*:8099/" };
             QueryTimeRatio = 0.5;
+            Plugins = new string[0];
         }
     }
 }
