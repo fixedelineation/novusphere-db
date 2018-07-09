@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using System.Net;
 using System.IO;
-
+using System.Linq;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using Newtonsoft.Json;
@@ -33,6 +33,7 @@ namespace Novusphere.Database
             {
                 case "/api": HandleAPI(); break;
                 case "/hello": HandleHello(); break;
+                case "/plugins": HandlePlugins(); break;
                 default: Content("Unknown path request", "text/plain"); break;
             }
         }
@@ -59,6 +60,11 @@ namespace Novusphere.Database
         private HttpListenerResponse Json(object obj)
         {
             return Content(JsonConvert.SerializeObject(obj), "application/json");
+        }
+
+        private HttpListenerResponse HandlePlugins()
+        {
+            return Json(Program.PluginManager.Plugins.Select(p => p.GetType().FullName));
         }
 
         private HttpListenerResponse HandleHello()
