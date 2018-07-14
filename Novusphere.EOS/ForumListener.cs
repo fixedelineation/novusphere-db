@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Dynamic;
+using System.Linq;
 using MongoDB.Driver;
 using MongoDB.Bson;
 using Newtonsoft.Json;
@@ -67,14 +69,79 @@ namespace Novusphere.EOS
             ResetContext();
         }
 
+        private IEnumerable<dynamic> EOSTracker()
+        {
+            var wc = new WebClient();
+            var actions = (JArray)JsonConvert.DeserializeObject(wc.DownloadString($"https://api.eostracker.io/accounts/eosforumtest/actions/to?page={_page}&size=100"));
+            return actions.ToObject<dynamic[]>();
+        }
+
+        private IEnumerable<dynamic> EOSFlare()
+        {
+            var request = new Dictionary<string, object>();
+            request["_headers"] = new Dictionary<string, object>() { { "content-type", "application/json" } };
+            request["_method"] = "POST";
+            request["_url"] = "/chain/get_actions";
+            request["account"] = "eosforumtest";
+            request["lang"] = "en-US";
+
+            var requestJson = JsonConvert.SerializeObject(request);
+
+            var wc = new WebClient();
+            wc.Headers[HttpRequestHeader.ContentType] = "application/json";
+            dynamic payload = JsonConvert.DeserializeObject(wc.UploadString("https://api.eosflare.io/chain/get_actions", requestJson));
+
+            var actions = ((JArray)payload.actions).ToObject<dynamic[]>();
+            for (int i = 0; i < actions.Length; i++)
+            {
+                var action = actions[actions.Length - 1 - i];
+                if (action.type != "eosforumtest - post")
+                    continue;
+
+                // some transactions have data as a hex string (?)
+                var data = JsonConvert.DeserializeObject((string)action.info);
+                if (data is string)
+                    continue;
+
+                // convert to same format that EOSTracker uses
+                dynamic obj = new JObject();
+                obj.id = action.id;
+                obj.seq = 0;
+                obj.account = "eosforumtest";
+                obj.transaction = action.trx_id;
+                obj.blockId = -1;
+                obj.createdAt = ((DateTimeOffset)DateTime.Parse((string)action.datetime)).ToUnixTimeMilliseconds() / 1000;
+                obj.name = "post";
+                obj.data = data;
+                obj.authorizations = new JArray();
+
+                yield return obj;
+            }
+        }
+
+        private IEnumerable<dynamic> GetDataPayload()
+        {
+            var fallbacks = new Func<IEnumerable<dynamic>>[] { EOSFlare, EOSTracker };
+            foreach (var getPayload in fallbacks)
+            {
+                try { return getPayload(); }
+                catch
+                {
+                    // move onto next fall back
+                }
+            }
+
+            Console.WriteLine("[EOSForumListener] Error: no data source available!");
+            return new dynamic[0];
+        }
+
         public void Process(IMongoDatabase db)
         {
             //Console.WriteLine($"Process {nameof(ForumListener)} at page {_page}");
 
-            var wc = new WebClient();
-            var actions = (JArray)JsonConvert.DeserializeObject(wc.DownloadString($"https://api.eostracker.io/accounts/eosforumtest/actions/to?page={_page}&size=100"));
+            var actions = GetDataPayload();
 
-            if (actions.Count == 0)
+            if (!actions.Any())
             {
                 Commit(db);
                 return;
