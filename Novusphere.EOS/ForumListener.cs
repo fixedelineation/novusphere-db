@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Net;
 using System.Dynamic;
 using System.Linq;
+using System.Text;
 using MongoDB.Driver;
 using MongoDB.Bson;
+using HtmlAgilityPack;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Novusphere.Shared;
@@ -76,6 +78,43 @@ namespace Novusphere.EOS
             return actions.ToObject<dynamic[]>();
         }
 
+        private string EOSFlareTryExtract(ref string s, int i, int iOffset, int i2, int i2Offset)
+        {
+            if (i == -1 || i2 == -1)
+                return null;
+
+            i += iOffset;
+            i2 += i2Offset;
+            var want = s.Substring(i, (i2 - i));
+            s = s.Remove(i, (i2 - i));
+
+            return want;
+        }
+
+        private dynamic EOSFlareDecodeJson(string html)
+        {
+            html = System.Net.WebUtility.HtmlDecode(html);
+
+            var decoder = new HtmlDocument();
+            decoder.LoadHtml((string)html);
+            
+            var text = decoder.DocumentNode.InnerText;
+
+            var content = EOSFlareTryExtract(ref text,
+                text.IndexOf("\"content\":"), 12,
+                text.IndexOf("\"reply_to_poster\""), -4);
+
+            var json_metadata = EOSFlareTryExtract(ref text,
+                text.IndexOf("\"json_metadata\":"), 18,
+                text.LastIndexOf("\""), 0);
+
+            dynamic result = JsonConvert.DeserializeObject(text);
+            result.content = content;
+            result.json_metadata = json_metadata;
+
+            return result;
+        }
+
         private IEnumerable<dynamic> EOSFlare()
         {
             var request = new Dictionary<string, object>();
@@ -99,9 +138,7 @@ namespace Novusphere.EOS
                     continue;
 
                 // some transactions have data as a hex string (?)
-                var data = JsonConvert.DeserializeObject((string)action.info);
-                if (data is string)
-                    continue;
+                var data = EOSFlareDecodeJson((string)action.info);
 
                 // convert to same format that EOSTracker uses
                 dynamic obj = new JObject();
