@@ -15,11 +15,14 @@ namespace Novusphere.EOS
 {
     public class ForumListener : IBlockchainListener
     {
+        private const int ITEMS_PER_PAGE = 25;
+        private const string DB_COLLECTION = "eosforum";
+
         public NovusphereConfig Config { get; private set; }
-        public string LastTxId { get; private set; }
 
         // process context
         private int _page;
+        private string _lastTxId;
         private List<dynamic> _documents;
 
         public ForumListener()
@@ -30,180 +33,115 @@ namespace Novusphere.EOS
         public void Start(NovusphereConfig config, IMongoDatabase db)
         {
             Config = config;
-            ResetContext();
 
             var recent = db
-                    .GetCollection<BsonDocument>(Config.Mongo.Collection)
+                    .GetCollection<BsonDocument>(DB_COLLECTION)
                     .Find(d => true)
                     .SortByDescending(d => d["id"])
                     .FirstOrDefault();
 
             if (recent != null)
-                LastTxId = recent["transaction"].ToString();
-        }
-
-        private void ResetContext()
-        {
-            _documents.Clear();
-            _page = 1;
+            {
+                _lastTxId = recent["transaction"].ToString();
+                _page = recent["page"].ToInt32();
+            }
+            else
+            {
+                _lastTxId = null;
+                _page = 1;
+            }
         }
 
         private void Commit(IMongoDatabase db)
         {
             if (_documents.Count > 0)
             {
-                Console.Write("[{0}] Committing {1} documents... ", DateTime.Now, _documents.Count);
+                Console.Write("[{0}] Committing {1} documents on page {2}... ", DateTime.Now, _documents.Count, _page);
 
                 var command = new JsonCommand<BsonDocument>(JsonConvert.SerializeObject(new
                 {
-                    insert = Config.Mongo.Collection,
+                    insert = DB_COLLECTION,
                     documents = _documents,
                     ordered = false
                 }));
 
                 var result = db.RunCommand<BsonDocument>(command);
 
-                LastTxId = _documents[0].transaction;
+                int iL = _documents.Count - 1;
+                _lastTxId = _documents[iL].transaction;
+                _page = _documents[iL].page;
 
                 Console.WriteLine("OK");
-            }
 
-            ResetContext();
-        }
-
-        private IEnumerable<dynamic> EOSTracker()
-        {
-            var wc = new WebClient();
-            var actions = (JArray)JsonConvert.DeserializeObject(wc.DownloadString($"https://api.eostracker.io/accounts/eosforumtest/actions/to?page={_page}&size=100"));
-            return actions.ToObject<dynamic[]>();
-        }
-
-        private string EOSFlareTryExtract(ref string s, int i, int iOffset, int i2, int i2Offset)
-        {
-            if (i == -1 || i2 == -1)
-                return null;
-
-            i += iOffset;
-            i2 += i2Offset;
-            var want = s.Substring(i, (i2 - i));
-            s = s.Remove(i, (i2 - i));
-
-            return want;
-        }
-
-        private dynamic EOSFlareDecodeJson(string html)
-        {
-            html = System.Net.WebUtility.HtmlDecode(html);
-
-            var decoder = new HtmlDocument();
-            decoder.LoadHtml((string)html);
-            
-            var text = decoder.DocumentNode.InnerText;
-
-            var content = EOSFlareTryExtract(ref text,
-                text.IndexOf("\"content\":"), 12,
-                text.IndexOf("\"reply_to_poster\""), -4);
-
-            var json_metadata = EOSFlareTryExtract(ref text,
-                text.IndexOf("\"json_metadata\":"), 18,
-                text.LastIndexOf("\""), 0);
-
-            dynamic result = JsonConvert.DeserializeObject(text);
-            result.content = content;
-            result.json_metadata = json_metadata;
-
-            return result;
-        }
-
-        private IEnumerable<dynamic> EOSFlare()
-        {
-            var request = new Dictionary<string, object>();
-            request["_headers"] = new Dictionary<string, object>() { { "content-type", "application/json" } };
-            request["_method"] = "POST";
-            request["_url"] = "/chain/get_actions";
-            request["account"] = "eosforumtest";
-            request["lang"] = "en-US";
-
-            var requestJson = JsonConvert.SerializeObject(request);
-
-            var wc = new WebClient();
-            wc.Headers[HttpRequestHeader.ContentType] = "application/json";
-            dynamic payload = JsonConvert.DeserializeObject(wc.UploadString("https://api.eosflare.io/chain/get_actions", requestJson));
-
-            var actions = ((JArray)payload.actions).ToObject<dynamic[]>();
-            for (int i = 0; i < actions.Length; i++)
-            {
-                var action = actions[actions.Length - 1 - i];
-                if (action.type != "eosforumtest - post")
-                    continue;
-
-                // some transactions have data as a hex string (?)
-                var data = EOSFlareDecodeJson((string)action.info);
-
-                // convert to same format that EOSTracker uses
-                dynamic obj = new JObject();
-                obj.id = action.id;
-                obj.seq = 0;
-                obj.account = "eosforumtest";
-                obj.transaction = action.trx_id;
-                obj.blockId = -1;
-                obj.createdAt = ((DateTimeOffset)DateTime.Parse((string)action.datetime)).ToUnixTimeMilliseconds() / 1000;
-                obj.name = "post";
-                obj.data = data;
-                obj.authorizations = new JArray();
-
-                yield return obj;
+                _documents.Clear();
             }
         }
 
-        private IEnumerable<dynamic> GetDataPayload()
+        private dynamic GetActions(string bpApi, string account_name, int pos, int offset)
         {
-            var fallbacks = new Func<IEnumerable<dynamic>>[] { EOSFlare, EOSTracker };
-            foreach (var getPayload in fallbacks)
+            var wc = new WebClient();
+            var str = wc.UploadString(bpApi + "/v1/history/get_actions", JsonConvert.SerializeObject(new
             {
-                try { return getPayload(); }
-                catch
+                account_name = account_name,
+                pos = pos,
+                offset = offset,
+            }));
+            var json = JsonConvert.DeserializeObject(str);
+            return json;
+        }
+
+        private List<dynamic> StripPayload(object payload)
+        {
+            var result = new List<dynamic>();
+            foreach (var action in ((dynamic)payload).actions)
+            {
+                var trace = action.action_trace;
+                var act = trace.act;
+
+                var obj = new
                 {
-                    // move onto next fall back
-                }
-            }
+                    page = _page,
+                    id = (int)action.global_action_seq,
+                    account = (string)act.account,
+                    transaction = (string)trace.trx_id,
+                    blockId = (int)action.block_num,
+                    createdAt = ((DateTimeOffset)DateTime.Parse((string)action.block_time)).ToUnixTimeSeconds(),
+                    name = (string)act.name,
+                    data = ((JToken)act.data).DeepClone()
+                };
 
-            Console.WriteLine("[EOSForumListener] Error: no data source available!");
-            return new dynamic[0];
+                result.Add(obj);
+            }
+            return result;
         }
 
         public void Process(IMongoDatabase db)
         {
-            //Console.WriteLine($"Process {nameof(ForumListener)} at page {_page}");
+            object payload = GetActions("https://api.eosnewyork.io", 
+                "eosforumtest", 
+                (_page-1) * ITEMS_PER_PAGE, 
+                ITEMS_PER_PAGE - 1);
 
-            var actions = GetDataPayload();
+            var actions = StripPayload(payload);
 
-            if (!actions.Any())
+            // find where we left off from
+            int start_i = actions.FindIndex(a => a.transaction == _lastTxId) + 1;
+
+            // scan through new actions
+            for (int i = start_i; i < actions.Count; i++)
             {
-                Commit(db);
-                return;
-            }
-
-            foreach (dynamic action in actions)
-            {
-                string txid = action.transaction;
-                if (txid == LastTxId)
-                {
-                    Commit(db);
-                    return;
-                }
-                else if (LastTxId == null)
-                    LastTxId = txid;
+                var action = actions[i];
 
                 if (action.name == "post")
                 {
                     // try deserialize metadata and modify object
-                    string json_metadata = action.data.json_metadata;
-                    if (json_metadata.Length > 0)
+                    JToken adata = action.data;
+                    if (adata.Type == JTokenType.Object)
                     {
+                        JToken json_metadata = adata["json_metadata"];
                         try
                         {
-                            var json = JsonConvert.DeserializeObject(json_metadata);
+                            var json = JsonConvert.DeserializeObject(json_metadata.Value<string>());
                             action.data.json_metadata = json;
                         }
                         catch (Exception ex)
@@ -216,7 +154,15 @@ namespace Novusphere.EOS
                 _documents.Add(action);
             }
 
-            _page++;
+            if (actions.Count == ITEMS_PER_PAGE) // move to next page
+            {
+                Commit(db);
+                _page++;
+            }
+            else if (start_i <= actions.Count - 1) // was there new stuff in this pg?
+            {
+                Commit(db);
+            }
         }
     }
 }

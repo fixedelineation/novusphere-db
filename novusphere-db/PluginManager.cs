@@ -16,7 +16,7 @@ namespace Novusphere.Database
 {
     public class PluginManager
     {
-        private const int REST_TIME = 2000;
+        private const int REST_TIME = 3000;
 
         private Thread _worker;
 

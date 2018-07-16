@@ -32,13 +32,21 @@ namespace Novusphere.Database
         private void CheckAllowed(JToken q)
         {
             var mongo = Program.Config.Mongo;
-            if (!mongo.Allowed.Any(name =>
-                    q[name] != null &&
-                    q[name].Value<string>() == mongo.Collection))
+            foreach (var qName in mongo.Allowed)
             {
-                var error = "Query must be of commands " + string.Join(", ", mongo.Allowed) + " and value \"" + mongo.Collection + "\"";
-                throw new ArgumentException(error);
+                var token = q[qName];
+                if (token != null)
+                {
+                    var collection = token.Value<string>();
+                    if (mongo.Collection.Any(c => c == collection))
+                        return; // acceptable
+                }
             }
+
+            throw new ArgumentException("Query must be of commands " +
+                string.Join(", ", mongo.Allowed) + " and of collections " +
+                string.Join(", ", mongo.Collection)
+            );
         }
 
         public BsonDocument RunQuery(string query)

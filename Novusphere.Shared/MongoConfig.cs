@@ -8,14 +8,14 @@ namespace Novusphere.Shared
     {
         public string Connection { get; set; }
         public string Database { get; set; }
-        public string Collection { get; set; }
+        public string[] Collection { get; set; }
         public string[] Allowed { get; set; }
 
         public void SetDefault()
         {
             Connection = "mongodb://localhost:27017";
             Database = "novusphere";
-            Collection = "novusphere";
+            Collection = new string[0];
             Allowed = new string[] { "find", "count", "aggregate", "distinct", "group", "mapReduce" };
         }
     }
