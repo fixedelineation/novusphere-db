@@ -67,9 +67,12 @@ namespace Novusphere.EOS
 
                 var result = db.RunCommand<BsonDocument>(command);
 
-                int iL = _documents.Count - 1;
-                _lastTxId = _documents[iL].transaction;
-                _page = _documents[iL].page;
+                var last = _documents
+                    .OrderByDescending(d =>  (int)d.id)
+                    .FirstOrDefault();
+
+                _lastTxId = last.transaction;
+                _page = last.page;
 
                 Console.WriteLine("OK");
 
