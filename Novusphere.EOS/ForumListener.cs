@@ -22,7 +22,8 @@ namespace Novusphere.EOS
 
         // process context
         private int _page;
-        private string _lastTxId;
+        private string _lastTx;
+        private int _lastTxId;
         private List<dynamic> _documents;
 
         public ForumListener()
@@ -42,12 +43,14 @@ namespace Novusphere.EOS
 
             if (recent != null)
             {
-                _lastTxId = recent["transaction"].ToString();
+                _lastTx = recent["transaction"].ToString();
+                _lastTxId = recent["id"].ToInt32();
                 _page = recent["page"].ToInt32();
             }
             else
             {
-                _lastTxId = null;
+                _lastTx = null;
+                _lastTxId = 0;
                 _page = 1;
             }
         }
@@ -71,7 +74,8 @@ namespace Novusphere.EOS
                     .OrderByDescending(d =>  (int)d.id)
                     .FirstOrDefault();
 
-                _lastTxId = last.transaction;
+                _lastTx = last.transaction;
+                _lastTxId = last.id;
                 _page = last.page;
 
                 Console.WriteLine("OK");
@@ -128,7 +132,7 @@ namespace Novusphere.EOS
             var actions = StripPayload(payload);
 
             // find where we left off from
-            int start_i = actions.FindIndex(a => a.transaction == _lastTxId) + 1;
+            int start_i = actions.FindIndex(a => a.transaction == _lastTx) + 1;
 
             // scan through new actions
             for (int i = start_i; i < actions.Count; i++)
@@ -154,7 +158,9 @@ namespace Novusphere.EOS
                     }
                 }
 
-                _documents.Add(action);
+                // fail safe
+                if ((int)action.id > _lastTxId)
+                    _documents.Add(action);
             }
 
             if (actions.Count == ITEMS_PER_PAGE) // move to next page
