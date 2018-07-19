@@ -124,10 +124,19 @@ namespace Novusphere.EOS
 
         public void Process(IMongoDatabase db)
         {
-            object payload = GetActions("https://api.eosnewyork.io", 
-                "eosforumtest", 
-                (_page-1) * ITEMS_PER_PAGE, 
-                ITEMS_PER_PAGE - 1);
+            object payload;
+            try
+            {
+                payload = GetActions("https://api.eosnewyork.io", 
+                    "eosforumtest", 
+                    (_page-1) * ITEMS_PER_PAGE, 
+                    ITEMS_PER_PAGE - 1);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error: {0}", ex.Message);
+                return;
+            }
 
             var actions = StripPayload(payload);
 
