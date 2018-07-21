@@ -35,8 +35,15 @@ namespace Novusphere.EOS
         {
             Config = config;
 
-            var recent = db
-                    .GetCollection<BsonDocument>(DB_COLLECTION)
+            var collection = db.GetCollection<BsonDocument>(DB_COLLECTION);
+            
+            var i1 = collection.Indexes.CreateOne(Builders<BsonDocument>.IndexKeys.Ascending(_ => _["transaction"]));
+            var i2 = collection.Indexes.CreateOne(Builders<BsonDocument>.IndexKeys.Descending(_ => _["createdAt"]));
+            var i3 = collection.Indexes.CreateOne(Builders<BsonDocument>.IndexKeys.Ascending(_ => _["data.json_metadata.sub"]));
+            var i4 = collection.Indexes.CreateOne(Builders<BsonDocument>.IndexKeys.Ascending(_ => _["data.post_uuid"]));
+            var i5 = collection.Indexes.CreateOne(Builders<BsonDocument>.IndexKeys.Ascending(_ => _["data.reply_to_post_uuid"]));
+
+            var recent = collection
                     .Find(d => true)
                     .SortByDescending(d => d["id"])
                     .FirstOrDefault();
