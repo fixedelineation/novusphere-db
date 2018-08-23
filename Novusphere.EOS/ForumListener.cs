@@ -17,6 +17,8 @@ namespace Novusphere.EOS
     {
         private const int ITEMS_PER_PAGE = 25;
         private const string DB_COLLECTION = "eosforum";
+        private const string EOS_CONTRACT = "eosforumdapp";
+        private const int LAST_EOSFORUMTEST_ACTION = 295201687;
 
         public NovusphereConfig Config { get; private set; }
 
@@ -38,7 +40,8 @@ namespace Novusphere.EOS
             Config = config;
 
             var collection = db.GetCollection<BsonDocument>(DB_COLLECTION);
-            
+
+            var i0 = collection.Indexes.CreateOne(Builders<BsonDocument>.IndexKeys.Ascending(_ => _["name"]));
             var i1 = collection.Indexes.CreateOne(Builders<BsonDocument>.IndexKeys.Ascending(_ => _["transaction"]));
             var i2 = collection.Indexes.CreateOne(Builders<BsonDocument>.IndexKeys.Descending(_ => _["createdAt"]));
             var i3 = collection.Indexes.CreateOne(Builders<BsonDocument>.IndexKeys.Ascending(_ => _["data.json_metadata.sub"]));
@@ -55,6 +58,13 @@ namespace Novusphere.EOS
                 _lastTx = recent["transaction"].ToString();
                 _lastTxId = recent["id"].ToInt32();
                 _page = USE_EOS_FLARE ? 0 : recent["page"].ToInt32();
+
+                if (_lastTxId == LAST_EOSFORUMTEST_ACTION) // migrate to new contract
+                {
+                    _lastTx = null;
+                    _lastTxId = 0;
+                    _page = 1;
+                }
             }
             else
             {
@@ -70,6 +80,7 @@ namespace Novusphere.EOS
             {
                 Console.Write("[{0}] Committing {1} documents on page {2}... ", DateTime.Now, _documents.Count, _page);
 
+
                 var command = new JsonCommand<BsonDocument>(JsonConvert.SerializeObject(new
                 {
                     insert = DB_COLLECTION,
@@ -80,8 +91,8 @@ namespace Novusphere.EOS
                 var result = db.RunCommand<BsonDocument>(command);
 
                 var last = _documents
-                    .OrderByDescending(d =>  (int)d.id)
-                    .FirstOrDefault();
+                            .OrderByDescending(d => (int)d.id)
+                            .FirstOrDefault();
 
                 _lastTx = last.transaction;
                 _lastTxId = last.id;
@@ -105,7 +116,7 @@ namespace Novusphere.EOS
             if (keys == null || keys.Count == 0)
                 return false;
 
-            foreach (var key in keys) 
+            foreach (var key in keys)
             {
                 // find value sibling
                 var value = key.NextSibling;
@@ -126,7 +137,7 @@ namespace Novusphere.EOS
             request["_headers"] = new Dictionary<string, object>() { { "content-type", "application/json" } };
             request["_method"] = "POST";
             request["_url"] = "/chain/get_actions";
-            request["account"] = "eosforumtest";
+            request["account"] = EOS_CONTRACT;
             request["lang"] = "en-US";
             request["limit"] = ITEMS_PER_PAGE;
             request["page"] = _page;
@@ -143,7 +154,7 @@ namespace Novusphere.EOS
             for (int i = 0; i < actions.Length; i++)
             {
                 var action = actions[actions.Length - 1 - i];
-                if (action.type != "eosforumtest - post")
+                if (action.type != EOS_CONTRACT + " - post")
                     continue;
 
                 // some transactions have data as a hex string (?)
@@ -156,7 +167,7 @@ namespace Novusphere.EOS
                 obj.page = -1;
                 obj.id = action.id;
                 obj.seq = 0;
-                obj.account = "eosforumtest";
+                obj.account = EOS_CONTRACT;
                 obj.transaction = action.trx_id;
                 obj.blockId = -1;
                 obj.createdAt = ((DateTimeOffset)DateTime.Parse((string)action.datetime)).ToUnixTimeMilliseconds() / 1000;
@@ -168,19 +179,6 @@ namespace Novusphere.EOS
             }
 
             return actions2;
-        }
-
-        private dynamic GetActions(string bpApi, string account_name, int pos, int offset)
-        {
-            var wc = new WebClient();
-            var str = wc.UploadString(bpApi + "/v1/history/get_actions", JsonConvert.SerializeObject(new
-            {
-                account_name = account_name,
-                pos = pos,
-                offset = offset,
-            }));
-            var json = JsonConvert.DeserializeObject(str);
-            return json;
         }
 
         private List<dynamic> BlockProducerStripPayload(object payload)
@@ -220,16 +218,50 @@ namespace Novusphere.EOS
             var json = JsonConvert.DeserializeObject(str);
             return BlockProducerStripPayload(json);
         }
-        
+
         private List<dynamic> GetActions()
         {
             if (USE_EOS_FLARE)
                 return EosFlareGetActions();
             else
-                return BlockProducerGetActions("https://eos.greymass.com", 
-                    "eosforumtest", 
-                    (_page-1) * ITEMS_PER_PAGE,
+                return BlockProducerGetActions("https://eos.greymass.com",
+                    EOS_CONTRACT,
+                    (_page - 1) * ITEMS_PER_PAGE,
                     ITEMS_PER_PAGE - 1);
+        }
+
+        private void ProcessJson(dynamic action)
+        {
+            string action_name = (string)action.name;
+            string json_field = null;
+
+            if (action_name == "post")
+                json_field = "json_metadata";
+            else if (action_name == "propose")
+                json_field = "proposal_json";
+            else if (action_name == "vote")
+                json_field = "vote_json";
+
+            if (json_field != null)
+            {
+                // try deserialize metadata and modify object
+                JToken adata = action.data;
+                if (adata.Type == JTokenType.Object)
+                {
+                    JToken json_metadata = adata[json_field];
+                    try
+                    {
+                        JObject json = (JObject)JsonConvert.DeserializeObject(json_metadata.Value<string>());
+                        if (json_field == "proposal_json")
+                            adata["_" + json_field] = json_metadata.Value<string>();
+                        adata[json_field] = json;
+                    }
+                    catch (Exception ex)
+                    {
+                        // failed to parse...
+                    }
+                }
+            }
         }
 
         private void EosFlareProcess(IMongoDatabase db, List<dynamic> actions)
@@ -244,31 +276,14 @@ namespace Novusphere.EOS
             for (int i = 0; i < actions.Count; i++)
             {
                 var action = actions[i];
-                string txid = action.transaction;
+                string txid = (string)action.transaction;
                 if (txid == _lastTx)
                 {
                     Commit(db);
                     return;
                 }
 
-                if (action.name == "post")
-                {
-                    // try deserialize metadata and modify object
-                    JToken adata = action.data;
-                    if (adata.Type == JTokenType.Object)
-                    {
-                        JToken json_metadata = adata["json_metadata"];
-                        try
-                        {
-                            var json = JsonConvert.DeserializeObject(json_metadata.Value<string>());
-                            action.data.json_metadata = json;
-                        }
-                        catch (Exception ex)
-                        {
-                            // failed to parse...
-                        }
-                    }
-                }
+                ProcessJson(action);
 
                 // fail safe
                 if (_page > 0 || (int)action.id > _lastTxId)
@@ -288,28 +303,12 @@ namespace Novusphere.EOS
             for (int i = start_i; i < actions.Count; i++)
             {
                 var action = actions[i];
+                int action_id = (int)action.id;
 
-                if (action.name == "post")
-                {
-                    // try deserialize metadata and modify object
-                    JToken adata = action.data;
-                    if (adata.Type == JTokenType.Object)
-                    {
-                        JToken json_metadata = adata["json_metadata"];
-                        try
-                        {
-                            var json = JsonConvert.DeserializeObject(json_metadata.Value<string>());
-                            action.data.json_metadata = json;
-                        }
-                        catch (Exception ex)
-                        {
-                            // failed to parse...
-                        }
-                    }
-                }
+                ProcessJson(action);
 
                 // fail safe
-                if ((int)action.id > _lastTxId)
+                if (action_id > _lastTxId || action_id < LAST_EOSFORUMTEST_ACTION)
                     _documents.Add(action);
             }
 
