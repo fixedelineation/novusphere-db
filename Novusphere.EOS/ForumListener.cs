@@ -242,10 +242,6 @@ namespace Novusphere.EOS
             else if (action_name == "vote")
                 json_field = "vote_json";
 
-            if ((string)action.transaction == "e011fc476cbb29ee1288d16ee0d3e6a0fc7b5ca9bf504885f89e78e8fb3239db") {
-                Console.WriteLine();
-            }
-
             if (json_field != null)
             {
                 // try deserialize metadata and modify object
