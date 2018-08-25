@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Net;
+using System.Linq;
 using System.Collections.Concurrent;
 using System.Threading;
 using System.IO;
@@ -22,22 +23,43 @@ namespace Novusphere.Database
 
         public List<IBlockchainListener> Plugins { get; private set; }
 
-        public PluginManager(string[] plugins)
+        public PluginManager()
         {
+            var db = GetDatabase();
+            
             Plugins = new List<IBlockchainListener>();
-            foreach (var pluginPath in plugins)
+            foreach (JObject config in Program.Config.Plugins)
             {
+                var pluginPath = config["Module"].ToObject<string>();
+                var pluginType = config["Type"].ToObject<string>();
                 var fullPath = Path.Combine(Directory.GetCurrentDirectory(), pluginPath);
                 var asm = Assembly.LoadFile(fullPath);
-                foreach (var type in asm.GetTypes())
-                {
-                    if (typeof(IBlockchainListener).IsAssignableFrom(type))
+                var type = asm.GetType(pluginType);
+
+                var ctor = type.GetConstructors().FirstOrDefault(c =>
                     {
-                        var instance = (IBlockchainListener)Activator.CreateInstance(type);
-                        Plugins.Add(instance);
-                        Console.WriteLine("Loaded plugin {0}", type.FullName);
-                    }
+                        var parameters = c.GetParameters();
+                        return
+                            parameters.Length == 1 &&
+                            typeof(PluginConfig).IsAssignableFrom(parameters[0].ParameterType);
+                    });
+
+                var pluginConfigType = ctor.GetParameters()[0].ParameterType;
+                var pluginConfig = (PluginConfig)config.ToObject(pluginConfigType);
+
+                // create indices
+                foreach (var collection in pluginConfig.Collections)
+                {
+                    var dbCollection = db.GetCollection<BsonDocument>(collection.Name);
+                    foreach (var index in collection.Indices.Ascending)
+                        dbCollection.Indexes.CreateOne(Builders<BsonDocument>.IndexKeys.Ascending(_ => _[index]));
+                    foreach (var index in collection.Indices.Descending)
+                        dbCollection.Indexes.CreateOne(Builders<BsonDocument>.IndexKeys.Descending(_ => _[index]));
                 }
+
+                var instance = (IBlockchainListener)ctor.Invoke(new object[] { pluginConfig });
+                Plugins.Add(instance);
+                Console.WriteLine("Loaded plugin {0}", type.FullName);
             }
         }
 
@@ -54,11 +76,12 @@ namespace Novusphere.Database
             {
                 var db = GetDatabase();
                 foreach (var plugin in Plugins)
-                    plugin.Start(Program.Config, db);
+                    plugin.Start(db);
 
                 for (;;)
                 {
-                    Process();
+                    foreach (var plugin in Plugins)
+                        plugin.Process(db);
                     Thread.Sleep(REST_TIME); // make shorter later?
                 }
             });
@@ -72,13 +95,6 @@ namespace Novusphere.Database
                 _worker.Abort();
                 _worker = null;
             }
-        }
-
-        public void Process()
-        {
-            var db = GetDatabase();
-            foreach (var plugin in Plugins)
-                plugin.Process(db);
         }
     }
 }

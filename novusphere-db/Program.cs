@@ -49,7 +49,7 @@ namespace Novusphere.Database
 
         static void StartPlugins() 
         {
-            PluginManager = new PluginManager(Config.Plugins);
+            PluginManager = new PluginManager();
             PluginManager.Start();
         }
 

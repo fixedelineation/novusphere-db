@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using Newtonsoft.Json.Linq;
 
 namespace Novusphere.Shared
 {
@@ -9,7 +10,7 @@ namespace Novusphere.Shared
         public MongoConfig Mongo { get; set; }
         public string[] UriPrefixes { get; set; }
         public double QueryTimeRatio { get; set;}
-        public string[] Plugins { get; set; }
+        public JObject[] Plugins { get; set; }
 
         public void SetDefault()
         {
@@ -17,7 +18,7 @@ namespace Novusphere.Shared
             Mongo.SetDefault();
             UriPrefixes = new string[] { "http://*:8099/" };
             QueryTimeRatio = 0.5;
-            Plugins = new string[0];
+            Plugins = new JObject[0];
         }
     }
 }

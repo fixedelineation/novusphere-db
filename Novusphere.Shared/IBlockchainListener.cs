@@ -5,7 +5,7 @@ namespace Novusphere.Shared
 {
     public interface IBlockchainListener
     {
-        void Start(NovusphereConfig config, IMongoDatabase db);
+        void Start(IMongoDatabase db);
         void Process(IMongoDatabase db);
     }
 }
