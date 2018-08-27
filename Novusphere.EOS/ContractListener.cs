@@ -13,14 +13,21 @@ using Novusphere.Shared;
 
 namespace Novusphere.EOS
 {
+    public class ContractJsonParse
+    {
+        public string Name { get; set; }
+        public string Field { get; set; }
+        public bool Preserve { get; set; }
+    }
+
     public class ContractListenerConfig : PluginConfig
     {
         public string Contract { get; set; }
+        public ContractJsonParse[] JsonParse { get; set; }
     }
 
     public class ContractListener : IBlockchainListener
     {
-        public const bool USE_EOS_FLARE = false; // untested: true
         public const int ITEMS_PER_PAGE = 25;
 
         public ContractListenerConfig Config { get; private set; }
@@ -52,13 +59,13 @@ namespace Novusphere.EOS
             {
                 LastTx = recent["transaction"].ToString();
                 LastTxId = recent["id"].ToInt32();
-                Page = USE_EOS_FLARE ? 0 : recent["page"].ToInt32();
+                Page = recent["page"].ToInt32();
             }
             else
             {
                 LastTx = null;
                 LastTxId = 0;
-                Page = USE_EOS_FLARE ? 0 : 1;
+                Page = 1;
             }
         }
 
@@ -68,6 +75,8 @@ namespace Novusphere.EOS
             {
                 Console.Write("[{0}] Committing {1} documents on page {2}... ", DateTime.Now, Documents.Count, Page);
 
+                foreach (var document in Documents)
+                    BeforeAddDocument(db, document);
 
                 var command = new JsonCommand<BsonDocument>(JsonConvert.SerializeObject(new
                 {
@@ -84,87 +93,17 @@ namespace Novusphere.EOS
 
                 LastTx = last.transaction;
                 LastTxId = last.id;
-                Page = USE_EOS_FLARE ? 0 : (int)last.page;
+                Page = (int)last.page;
 
                 Console.WriteLine("OK");
-
+                
                 Documents.Clear();
             }
         }
-
-        private bool DecodeEOSFlareData(string info, out object data)
+        
+        protected virtual void BeforeAddDocument(IMongoDatabase db, object _document)
         {
-            JObject _data;
-            data = (_data = new JObject());
 
-            var document = new HtmlDocument();
-            document.LoadHtml(info);
-
-            var keys = document.DocumentNode.SelectNodes("//span[contains(@class, 'json-key')]");
-            if (keys == null || keys.Count == 0)
-                return false;
-
-            foreach (var key in keys)
-            {
-                // find value sibling
-                var value = key.NextSibling;
-                while (value.Name != "span")
-                    value = value.NextSibling;
-
-                string json_key = WebUtility.HtmlDecode(key.InnerHtml);
-                string json_value = WebUtility.HtmlDecode(value.InnerHtml);
-                _data[json_key] = json_value;
-            }
-
-            return true;
-        }
-
-        private List<dynamic> EosFlareGetActions()
-        {
-            var request = new Dictionary<string, object>();
-            request["_headers"] = new Dictionary<string, object>() { { "content-type", "application/json" } };
-            request["_method"] = "POST";
-            request["_url"] = "/chain/get_actions";
-            request["account"] = Config.Contract;
-            request["lang"] = "en-US";
-            request["limit"] = ITEMS_PER_PAGE;
-            request["page"] = Page;
-
-            var requestJson = JsonConvert.SerializeObject(request);
-
-            var wc = new WebClient();
-            wc.Headers[HttpRequestHeader.ContentType] = "application/json";
-            dynamic payload = JsonConvert.DeserializeObject(wc.UploadString("https://api-prd.eosflare.io/chain/get_actions", requestJson));
-
-            var actions = ((JArray)payload.actions).ToObject<dynamic[]>();
-            var actions2 = new List<dynamic>();
-
-            for (int i = 0; i < actions.Length; i++)
-            {
-                var action = actions[actions.Length - 1 - i];
-
-                // some transactions have data as a hex string (?)
-                object eosflareData;
-                if (!DecodeEOSFlareData((string)action.info, out eosflareData))
-                    continue;
-
-                // convert to same format that EOSTracker uses
-                dynamic obj = new JObject();
-                obj.page = -1;
-                obj.id = action.id;
-                obj.seq = 0;
-                obj.account = Config.Contract;
-                obj.transaction = action.trx_id;
-                obj.blockId = -1;
-                obj.createdAt = ((DateTimeOffset)DateTime.Parse((string)action.datetime)).ToUnixTimeMilliseconds() / 1000;
-                obj.name = "post";
-                obj.data = eosflareData;
-                obj.authorizations = new JArray();
-
-                actions2.Add(obj);
-            }
-
-            return actions2;
         }
 
         private List<dynamic> BlockProducerStripPayload(object payload)
@@ -187,7 +126,7 @@ namespace Novusphere.EOS
                     data = ((JToken)act.data).DeepClone()
                 };
 
-                result.Add(obj);
+                result.Add(JObject.FromObject(obj));
             }
             return result;
         }
@@ -207,9 +146,6 @@ namespace Novusphere.EOS
 
         private List<dynamic> GetActions()
         {
-            if (USE_EOS_FLARE)
-                return EosFlareGetActions();
-            else
                 return BlockProducerGetActions("https://eos.greymass.com",
                     Config.Contract,
                     (Page - 1) * ITEMS_PER_PAGE,
@@ -218,37 +154,42 @@ namespace Novusphere.EOS
 
         protected virtual void ProcessAction(dynamic action)
         {
-
-        }
-
-        private void EosFlareProcess(IMongoDatabase db, List<dynamic> actions)
-        {
-            // scan through new actions
-            if (actions.Count == 0)
-            {
-                Commit(db);
+            string action_name = (string)action.name;
+            JToken action_data = action.data;
+            if (action_data.Type != JTokenType.Object)
                 return;
-            }
 
-            for (int i = 0; i < actions.Count; i++)
+            foreach (var jsonConfig in Config.JsonParse)
             {
-                var action = actions[i];
-                string txid = (string)action.transaction;
-                if (txid == LastTx)
+                if (jsonConfig.Name != action_name)
+                    continue;
+
+                try
                 {
-                    Commit(db);
-                    return;
+                    var field = jsonConfig.Field.Split('.');
+                    var field_name = field[field.Length - 1];
+                    JToken fieldParent = action_data;
+
+                    // transverse
+                    for (var i = 0; i < field.Length - 1; i++)
+                        fieldParent = fieldParent[field[i]];
+
+                    // unpack json and update field
+                    var strJson = fieldParent[field_name].ToObject<string>();
+                    object json = JsonConvert.DeserializeObject(strJson);
+
+                    if (jsonConfig.Preserve)
+                        fieldParent["_" + field_name] = strJson;
+
+                    fieldParent[field_name] = (json is JToken) ? 
+                        (JToken)json : 
+                        JToken.FromObject(json);
                 }
-
-                ProcessAction(action);
-
-                // fail safe
-                if (Page > 0 || (int)action.id > LastTxId)
-                    Documents.Add(action);
+                catch (Exception ex)
+                {
+                    // failed
+                }
             }
-
-            Console.WriteLine("Processed page {0} moving to next (EOS Flare)...", Page);
-            Page++;
         }
 
         private void BlockProducerProcess(IMongoDatabase db, List<dynamic> actions)
@@ -300,10 +241,7 @@ namespace Novusphere.EOS
                 return;
             }
 
-            if (USE_EOS_FLARE)
-                EosFlareProcess(db, actions);
-            else
-                BlockProducerProcess(db, actions);
+            BlockProducerProcess(db, actions);
         }
     }
 }

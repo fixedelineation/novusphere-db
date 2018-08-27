@@ -30,6 +30,9 @@ namespace Novusphere.Database
             Plugins = new List<IBlockchainListener>();
             foreach (JObject config in Program.Config.Plugins)
             {
+                if (!config["Enabled"].ToObject<bool>())
+                    continue;
+
                 var pluginPath = config["Module"].ToObject<string>();
                 var pluginType = config["Type"].ToObject<string>();
                 var fullPath = Path.Combine(Directory.GetCurrentDirectory(), pluginPath);

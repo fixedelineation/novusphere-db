@@ -18,6 +18,7 @@ namespace Novusphere.Shared
 
     public class PluginConfig
     {
+        public bool Enabled { get; set; }
         public string Module { get; set; }     
         public string Type { get; set; }
         public MongoCollectionConfig[] Collections { get; set; }
