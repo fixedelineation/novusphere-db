@@ -72,8 +72,8 @@ namespace Novusphere.EOS
         private void Commit(IMongoDatabase db)
         {
             if (Documents.Count > 0)
-            {
-                Console.Write("[{0}] Committing {1} documents on page {2}... ", DateTime.Now, Documents.Count, Page);
+            {   
+                Console.Write("[{0}] Committing {1} documents on page {2} to {3}... ", DateTime.Now, Documents.Count, Page, Collection.Name);
 
                 foreach (var document in Documents)
                     BeforeAddDocument(db, document);
