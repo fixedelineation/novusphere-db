@@ -34,7 +34,22 @@ namespace Novusphere.Database
                 case "/api": HandleAPI(); break;
                 case "/hello": HandleHello(); break;
                 case "/plugins": HandlePlugins(); break;
-                default: Content("Unknown path request", "text/plain"); break;
+                default:
+                    {
+                        bool match = false;
+                        var content = GetPostContent();
+
+                        foreach (var p in Program.PluginManager.Plugins)
+                        {
+                            var result = p.HandleHttp(Session.GetDatabase(), path, content, out match);
+                            if (match)
+                                Json(result);
+                        }
+
+                        if (!match)
+                            Content("Unknown path request", "text/plain");
+                        break;
+                    }
             }
         }
 

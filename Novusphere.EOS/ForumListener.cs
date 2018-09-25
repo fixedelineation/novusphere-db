@@ -30,6 +30,42 @@ namespace Novusphere.EOS
             }
         }
 
+        protected override void ProcessAction(dynamic action)
+        {
+            string action_account = (string)action.account;
+            string action_name = (string)action.name;
+            JToken action_data = (JToken)action.data;
+
+            if (action_account != Config.Contract)
+                return;
+
+            if (action_data.Type == JTokenType.String)
+            {
+                var hex = action_data.ToObject<string>();
+                using (var rdr = Novusphere.EOS.EOSBinaryReader.FromHex(hex))
+                {
+                    switch (action_name)
+                    {
+                        case "post":
+                            action.data = JToken.FromObject(new
+                            {
+                                poster = rdr.ReadEOSAccountName(),
+                                post_uuid = rdr.ReadEOSString(),
+                                content = rdr.ReadEOSString(),
+                                reply_to_poster = rdr.ReadEOSAccountName(),
+                                reply_to_post_uuid = rdr.ReadEOSString(),
+                                certify = (int)rdr.ReadVarInt(),
+                                json_metadata = rdr.ReadEOSString()
+                            });
+                            break;
+                    }
+                }
+            }
+
+            base.ProcessAction((object)action);
+        }
+
+
         protected override bool IsSafeAction(object action)
         {
             dynamic _action = (dynamic)action;

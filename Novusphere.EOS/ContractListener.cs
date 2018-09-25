@@ -22,6 +22,7 @@ namespace Novusphere.EOS
 
     public class ContractListenerConfig : PluginConfig
     {
+        public string API { get; set; }
         public string Contract { get; set; }
         public ContractJsonParse[] JsonParse { get; set; }
     }
@@ -69,6 +70,12 @@ namespace Novusphere.EOS
             }
         }
 
+        public virtual object HandleHttp(IMongoDatabase db, string path, string content, out bool match)
+        {
+            match = false;
+            return null; 
+        }
+
         private void Commit(IMongoDatabase db)
         {
             if (Documents.Count > 0)
@@ -95,12 +102,20 @@ namespace Novusphere.EOS
                 LastTxId = last.id;
                 Page = (int)last.page;
 
+                foreach (var document in Documents)
+                    AfterAddDocument(db, document);
+
                 Console.WriteLine("OK");
                 
                 Documents.Clear();
             }
         }
         
+        protected virtual void AfterAddDocument(IMongoDatabase db, object _document)
+        {
+            
+        }
+
         protected virtual void BeforeAddDocument(IMongoDatabase db, object _document)
         {
 
@@ -146,7 +161,7 @@ namespace Novusphere.EOS
 
         private List<dynamic> GetActions()
         {
-                return BlockProducerGetActions("https://eos.greymass.com",
+                return BlockProducerGetActions(Config.API,
                     Config.Contract,
                     (Page - 1) * ITEMS_PER_PAGE,
                     ITEMS_PER_PAGE - 1);
@@ -155,7 +170,8 @@ namespace Novusphere.EOS
         protected virtual void ProcessAction(dynamic action)
         {
             string action_name = (string)action.name;
-            JToken action_data = action.data;
+            JToken action_data = (JToken)action.data;
+
             if (action_data.Type != JTokenType.Object)
                 return;
 
@@ -203,7 +219,8 @@ namespace Novusphere.EOS
                 var action = actions[i];
                 int action_id = (int)action.id;
 
-                ProcessAction(action);
+                try { ProcessAction(action); }
+                catch (Exception ex) { }
 
                 // fail safe
                 if (IsSafeAction(action))

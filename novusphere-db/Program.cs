@@ -6,6 +6,7 @@ using MongoDB.Driver;
 using MongoDB.Bson;
 using Newtonsoft.Json;
 using Novusphere.Shared;
+using Novusphere.EOS;
 
 namespace Novusphere.Database
 {

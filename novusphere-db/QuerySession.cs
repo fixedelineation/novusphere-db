@@ -49,6 +49,13 @@ namespace Novusphere.Database
             );
         }
 
+        public IMongoDatabase GetDatabase()
+        {
+            var client = new MongoClient(Program.Config.Mongo.Connection);
+            var db = client.GetDatabase(Program.Config.Mongo.Database);
+            return db;
+        }
+
         public BsonDocument RunQuery(string query)
         {
             JToken q = (JToken)JsonConvert.DeserializeObject(query);
@@ -64,8 +71,7 @@ namespace Novusphere.Database
 
             try
             {
-                var client = new MongoClient(Program.Config.Mongo.Connection);
-                var db = client.GetDatabase(Program.Config.Mongo.Database);
+                var db = GetDatabase();
                 var command = new JsonCommand<BsonDocument>(query);
                 result = db.RunCommand<BsonDocument>(command);
             }
