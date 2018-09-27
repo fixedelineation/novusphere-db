@@ -18,31 +18,18 @@ namespace Novusphere.EOS
 
         }
 
-        //https://github.com/EOSIO/eos/blob/master/contracts/eosiolib/types.hpp#L125
-        private static string NameToString(ulong value)
-        {
-            string charmap = ".12345abcdefghijklmnopqrstuvwxyz";
-            char[] str = new char[13];
-
-            long tmp = (long)value;
-            for( uint i = 0; i <= 12; ++i ) {
-                char c = charmap[(int)(tmp & (i == 0 ? 0x0f : 0x1f))];
-                str[12-i] = c;
-                tmp >>= (i == 0 ? 4 : 5);
-            }
-
-            return new string(str).TrimEnd('.');
-        }
-
         public override object HandleHttp(IMongoDatabase db, string path, string content, out bool match)
         {
             match = false;
-            if (!Regex.IsMatch(path, "\\/account\\/.+"))
-                return null;
 
-            match = true;
-            var helper = new DatabaseStateHandler(db, null, Config.Collections[1]);
-            return helper.FindOrCreateAccount(path.Split('/')[2], false);
+            if (Regex.IsMatch(path, "\\/account\\/.+"))
+            {
+                match = true;
+                var helper = new DatabaseStateHandler(db, null, Config.Collections);
+                return helper.FindOrCreateAccount(path.Split('/')[2], false);
+            }
+
+            return null;
         }
 
         protected override void BeforeAddDocument(IMongoDatabase db, object _document)
@@ -57,7 +44,7 @@ namespace Novusphere.EOS
                 if (protocol != "novusphere")
                     return;
 
-                var handler = new DatabaseStateHandler(db, (JObject)action, Config.Collections[1]);
+                var handler = new DatabaseStateHandler(db, (JObject)action, Config.Collections);
                 handler.Handle();
 
                 action.__valid = true;
