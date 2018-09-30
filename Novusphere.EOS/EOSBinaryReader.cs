@@ -33,7 +33,7 @@ namespace Novusphere.EOS
             return new string(str).TrimEnd('.');
         }
 
-        public static string ReadEOSAccountName(this BinaryReader br)
+        public static string ReadEOSName(this BinaryReader br)
         {
             return NameToString(br.ReadUInt64());
         }

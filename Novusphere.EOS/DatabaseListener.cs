@@ -76,7 +76,7 @@ namespace Novusphere.EOS
                             {
                                 action.data = JToken.FromObject(new
                                 {
-                                    account = rdr.ReadEOSAccountName(),
+                                    account = rdr.ReadEOSName(),
                                     json = rdr.ReadEOSString()
                                 });
                             }

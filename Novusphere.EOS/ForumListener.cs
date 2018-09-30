@@ -49,13 +49,45 @@ namespace Novusphere.EOS
                         case "post":
                             action.data = JToken.FromObject(new
                             {
-                                poster = rdr.ReadEOSAccountName(),
+                                poster = rdr.ReadEOSName(),
                                 post_uuid = rdr.ReadEOSString(),
                                 content = rdr.ReadEOSString(),
-                                reply_to_poster = rdr.ReadEOSAccountName(),
+                                reply_to_poster = rdr.ReadEOSName(),
                                 reply_to_post_uuid = rdr.ReadEOSString(),
                                 certify = (int)rdr.ReadVarInt(),
                                 json_metadata = rdr.ReadEOSString()
+                            });
+                            break;
+                        case "propose":
+                            action.data = JToken.FromObject(new
+                            {
+                                proposer = rdr.ReadEOSName(),
+                                proposal_name = rdr.ReadEOSName(),
+                                title = rdr.ReadEOSString(),
+                                proposal_json = rdr.ReadEOSString(),
+                                expires_at = rdr.ReadVarInt()
+                            });
+                            break;
+                        case "expire":
+                            action.data = JToken.FromObject(new
+                            {
+                                proposal_name = rdr.ReadEOSName()
+                            });
+                            break;
+                        case "vote":
+                            action.data = JToken.FromObject(new
+                            {
+                                voter = rdr.ReadEOSName(),
+                                proposal_name = rdr.ReadEOSName(),
+                                vote_value = rdr.ReadVarInt(),
+                                vote_json = rdr.ReadEOSString()
+                            });
+                            break;
+                        case "unvote":
+                            action.data = JToken.FromObject(new
+                            {
+                                voter = rdr.ReadEOSName(),
+                                proposal_name = rdr.ReadEOSName()
                             });
                             break;
                     }
