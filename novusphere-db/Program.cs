@@ -28,8 +28,8 @@ namespace Novusphere.Database
             var fp = Path.Combine("data", "config.json");
             if (!File.Exists(fp))
             {
-                Config = new NovusphereConfig();
-                Config.SetDefault();
+                var fp_default = Path.Combine("default", "config.json");
+                Config = JsonConvert.DeserializeObject<NovusphereConfig>(File.ReadAllText(fp_default));
                 File.WriteAllText(fp, JsonConvert.SerializeObject(Config, Formatting.Indented));
             }
             else

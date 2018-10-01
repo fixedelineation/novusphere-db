@@ -2,7 +2,10 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
+using System.Net;
+using System.IO;
 using MongoDB.Driver;
+using MongoDB.Bson;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -21,6 +24,37 @@ namespace Novusphere.EOS
         public override void Start(IMongoDatabase db)
         {
             base.Start(db);
+
+            if (LastTxId == 0) // is this a clean slate?
+            {
+                var snapshot_fp = Path.Combine("default", "forum-snapshot.json");
+                if (File.Exists(snapshot_fp))
+                    File.Delete(snapshot_fp);
+                
+                Console.WriteLine("Downloading recent forum snapshot...");
+                var wc = new WebClient();
+                wc.DownloadFile("https://cdn.novusphere.io/static/snapshot/eosforum.json", snapshot_fp);
+
+                var documents = new List<JObject>();
+                foreach (var entry in File.ReadAllLines(snapshot_fp))
+                    documents.Add(JObject.Parse(entry));
+
+                Console.WriteLine("Updating database with forum snapshot...");
+                const int DOCUMENT_INSERT_SIZE = 500;
+                for (var i = 0; i < documents.Count; i += DOCUMENT_INSERT_SIZE)
+                {
+                    var command = new JsonCommand<BsonDocument>(JsonConvert.SerializeObject(new
+                    {
+                        insert = Collection.Name,
+                        documents = documents.Skip(i).Take(DOCUMENT_INSERT_SIZE),
+                        ordered = false
+                    }));
+
+                    var result = db.RunCommand<BsonDocument>(command);
+                }
+
+                LastTxId = LAST_EOSFORUMTEST_ACTION;
+            }
 
             if (LastTxId == LAST_EOSFORUMTEST_ACTION) // migrate to new contract
             {

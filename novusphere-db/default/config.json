@@ -1,0 +1,99 @@
+﻿{
+  "Mongo": {
+    "Connection": "mongodb://localhost:27017",
+    "Collections": [ "eosforum" ],
+    "Database": "nsdb",
+    "Commands": [ "find", "count", "aggregate", "distinct", "group", "mapReduce" ]
+  },
+  "UriPrefixes": [
+    "http://*:8099/"
+  ],
+  "QueryTimeRatio": 0.5,
+  "Plugins": [
+    {
+      "Enabled": true,
+      "Module": "bin/Debug/netcoreapp2.0/Novusphere.EOS.dll",
+      "Type": "Novusphere.EOS.ForumListener",
+      "API": "https://eos.greymass.com",
+      "Collections": [
+        {
+          "Name": "eosforum",
+          "Indices": {
+            "Ascending": [
+              "name",
+              "transaction",
+              "data.json_metadata.sub",
+              "data.post_uuid",
+              "data.reply_to_post_uuid"
+            ],
+            "Descending": [
+              "createdAt"
+            ]
+          }
+        }
+      ],
+      "Contract": "eosforumdapp",
+      "JsonParse": [
+        {
+          "Name": "post",
+          "Field": "json_metadata",
+          "Preserve": false
+        },
+        {
+          "Name": "propose",
+          "Field": "proposal_json",
+          "Preserve": true
+        },
+        {
+          "Name": "vote",
+          "Field": "vote_json",
+          "Preserve": false
+        }
+      ]
+    },
+    {
+      "Enabled": true,
+      "Module": "bin/Debug/netcoreapp2.0/Novusphere.EOS.dll",
+      "Type": "Novusphere.EOS.DatabaseListener",
+      "API": "https://eos.greymass.com",
+      "Collections": [
+        {
+          "Name": "ns",
+          "Indices": {
+            "Ascending": [ "transaction", "data.account", "data.json.protocol", "data.json.method" ],
+            "Descending": [ "createdAt" ]
+          }
+        },
+        {
+          "Name": "ns_account",
+          "Indices": {
+            "Ascending": [ "name" ],
+            "Descending": []
+          }
+        },
+        {
+          "Name": "ns_post_state",
+          "Indices": {
+            "Ascending": [ "txid" ],
+            "Descending": []
+          }
+        },
+        {
+          "Name": "ns_post_vote",
+          "Indices": {
+            "Ascending": [ "account", "txid" ],
+            "Descending": []
+          }
+        }
+      ],
+      "Contract": "novuspheredb",
+      "JsonParse": [
+        {
+          "Name": "push",
+          "Field": "json",
+          "Preserve": false
+        }
+      ]
+    }
+  ]
+}
