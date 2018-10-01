@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Net;
 using System.Dynamic;
 using System.Linq;
@@ -136,7 +137,7 @@ namespace Novusphere.EOS
                     account = (string)act.account,
                     transaction = (string)trace.trx_id,
                     blockId = (int)action.block_num,
-                    createdAt = ((DateTimeOffset)DateTime.Parse((string)action.block_time)).ToUnixTimeSeconds(),
+                    createdAt = ((DateTimeOffset)DateTime.Parse((string)action.block_time, null, DateTimeStyles.AssumeUniversal)).ToUnixTimeSeconds(),
                     name = (string)act.name,
                     data = ((JToken)act.data).DeepClone()
                 };
