@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Net;
+using System.Security.Cryptography.X509Certificates;
 using System.Collections.Concurrent;
 
 namespace Novusphere.Database

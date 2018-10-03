@@ -25,7 +25,7 @@ namespace Novusphere.EOS
             if (Regex.IsMatch(path, "\\/account\\/.+"))
             {
                 match = true;
-                var helper = new DatabaseStateHandler(db, null, Config.Collections);
+                var helper = new DatabaseStateHandler(db, null, this);
                 return helper.FindOrCreateAccount(path.Split('/')[2], false);
             }
 
@@ -35,16 +35,21 @@ namespace Novusphere.EOS
         protected override void BeforeAddDocument(IMongoDatabase db, object _document)
         {
             var action = (dynamic)_document;
-            if ((string)action.name != "push" || (string)action.account != Config.Contract)
+            var action_account = (string)action.account;
+
+            if (action_account != Config.Contract && action_account != "novusphereio")
                 return;
-            
+
             try
             {
-                var protocol = (string)action.data.json.protocol;
-                if (protocol != "novusphere")
-                    return;
+                if (action_account == Config.Contract)
+                {
+                    var protocol = (string)action.data.json.protocol;
+                    if (protocol != "novusphere")
+                        return;
+                }
 
-                var handler = new DatabaseStateHandler(db, (JObject)action, Config.Collections);
+                var handler = new DatabaseStateHandler(db, (JObject)action, this);
                 handler.Handle();
 
                 action.__valid = true;

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Linq;
+using System.Net;
 using Novusphere.Shared;
 using MongoDB.Bson;
 using MongoDB.Driver;
@@ -19,30 +20,44 @@ namespace Novusphere.EOS
         private MongoCollectionConfig _postStateCollection;
         private MongoCollectionConfig _postVoteCollection;
 
+        private bool _nsdb;
         private string _account;
         private dynamic _data;
         private string _method;
+        private DatabaseListener _owner;
 
         public DatabaseStateHandler(
             IMongoDatabase db,
             JObject action,
-            MongoCollectionConfig[] collections)
+            DatabaseListener owner)
             : base(db, action)
         {
+            _owner = owner;
+
             // [0] = ns root
-            _accountCollection = collections[1];
-            _postStateCollection = collections[2];
-            _postVoteCollection = collections[3];
+            _accountCollection = _owner.Config.Collections[1];
+            _postStateCollection = _owner.Config.Collections[2];
+            _postVoteCollection = _owner.Config.Collections[3];
 
 
-            if (action != null) 
+            if (action != null)
             {
-                var adata = action["data"];
-                var json = adata["json"];
+                var action_account = (string)action["account"];
 
-                _account = (string)adata["account"].ToObject<string>();
-                _method = (string)json["method"].ToObject<string>();
-                _data = (dynamic)json["data"];
+                if (action_account == "novusphereio")
+                {
+                    _data = action;
+                }
+                else
+                {
+                    var adata = action["data"];
+                    var json = adata["json"];
+
+                    _account = (string)adata["account"].ToObject<string>();
+                    _method = (string)json["method"].ToObject<string>();
+                    _data = (dynamic)json["data"];
+                    _nsdb = true;
+                }
             }
         }
 
@@ -106,7 +121,7 @@ namespace Novusphere.EOS
                 (o) => new { name = o["name"].ToObject<string>() });
         }
 
-        public void UpdateThreads(params JObject[] threads)
+        public void UpdatePostStates(params JObject[] threads)
         {
             Update(_postStateCollection.Name, 
                 threads, 
@@ -128,13 +143,14 @@ namespace Novusphere.EOS
                 create ? creator : null);
         }
 
-        public dynamic FindOrCreateThread(string txid, bool create = true)
+        public dynamic FindOrCreatePostState(string txid, bool create = true)
         {
             Func<JObject> creator = () =>
             {
                 var value = new JObject();
                 value["txid"] = txid;
                 value["up"] = 0;
+                value["up_atmos"] = 0;
                 return value;
             };
 
@@ -194,25 +210,91 @@ namespace Novusphere.EOS
             });
 
             // update thread with vote
-            var thread = FindOrCreateThread(txid);
-            thread.up = (int)thread.up + 1;
-            UpdateThreads(thread);
+            var state = FindOrCreatePostState(txid);
+            state.up = (int)state.up + 1;
+            UpdatePostStates(state);
+        }
+
+        private dynamic GetTransaction(string txid)
+        {
+            var wc = new WebClient();
+            var str = wc.UploadString(_owner.Config.API + "/v1/history/get_transaction", JsonConvert.SerializeObject(new
+            {
+                id = txid
+            }));
+
+            dynamic tx = JsonConvert.DeserializeObject(str);
+            return tx;
         }
 
         public override void Handle()
         {
-            switch (_method)
+            if (_nsdb)
             {
-                case "account_state":
+                switch (_method)
+                {
+                    case "account_state":
+                        {
+                            AccountState();
+                            break;
+                        }
+                    case "forum_vote":
+                        {
+                            ForumVote();
+                            break;
+                        }
+                }
+            }
+            else
+            {
+                if ((string)_data.name != "transfer")
+                    return;
+
+                string memo = _data.data.memo;
+                if (memo.StartsWith("upvote for"))
+                {
+                    const int UPVOTE_ATMOS_RATE = 10;
+
+                    var post_txid = memo.Remove(0, 11);
+                    var atmos = double.Parse(((string)_data.data.quantity).Split(' ')[0]);
+
+                    var state = FindOrCreatePostState(post_txid, false);
+                    if (state == null)
+                        return;
+
+                    try
                     {
-                        AccountState();
-                        break;
+                        // verify upvoter also paid the poster...
+
+                        // TO-DO: tidy up...
+
+                        dynamic tx = GetTransaction((string)_data.transaction);
+                        IEnumerable<dynamic> actions = tx.trx.trx.actions;
+                        if (actions.Count() != 2)
+                            return;
+
+                        var tip = actions.FirstOrDefault();
+                        if (tip.account != "novusphereio" || tip.name != "transfer")
+                            return;
+
+                        if ((string)tip.data.quantity != (string)_data.data.quantity)
+                            return;
+
+                        dynamic tx2 = GetTransaction((string)post_txid);
+                        dynamic auth = tx2.trx.trx.actions[0].authorization[0];
+
+                        if ((string)tip.data.to != (string)auth.actor) // tip to poster
+                            return;
                     }
-                case "forum_vote":
+                    catch (Exception ex)
                     {
-                        ForumVote();
-                        break;
+                        // allow pass...
                     }
+
+                    double? up_atmos = (double?)state.up_atmos;
+                    state.up_atmos = ((up_atmos != null) ? (double)up_atmos : 0) + ((atmos * 2) / UPVOTE_ATMOS_RATE);
+                    UpdatePostStates(state);
+                }
             }
         }
     }
