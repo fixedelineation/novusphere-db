@@ -27,23 +27,6 @@ namespace Novusphere.EOS
                 TransactionId = action["transaction"].ToObject<string>();
         }
 
-        protected BsonDocument RunCommand(object payload)
-        {
-            var command = new JsonCommand<BsonDocument>(JsonConvert.SerializeObject(payload));
-            var result = Database.RunCommand<BsonDocument>(command);
-            return result;
-        }
-
-        protected dynamic BsonToJson(BsonValue value)
-        {
-            string jsonString = value.ToJson(new JsonWriterSettings()
-            {
-                OutputMode = JsonOutputMode.Strict
-            });
-
-            return JsonConvert.DeserializeObject(jsonString);
-        }
-
         public abstract void Handle();
     }
 

@@ -7,6 +7,7 @@ using System.Linq;
 using MongoDB.Driver;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Novusphere.Shared;
 
 namespace Novusphere.EOS
 {
@@ -25,8 +26,13 @@ namespace Novusphere.EOS
             if (Regex.IsMatch(path, "\\/account\\/.+"))
             {
                 match = true;
-                var helper = new DatabaseStateHandler(db, null, this);
-                return helper.FindOrCreateAccount(path.Split('/')[2], false);
+
+                var _db = new DBHelper(db)
+                {
+                    AccountCollection = Config.Collections[1].Name
+                };
+
+                return _db.FindOrCreateAccount(path.Split('/')[2], false);
             }
 
             return null;

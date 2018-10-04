@@ -19,6 +19,7 @@ namespace Novusphere.EOS
         private MongoCollectionConfig _accountCollection;
         private MongoCollectionConfig _postStateCollection;
         private MongoCollectionConfig _postVoteCollection;
+        private DBHelper _dbh;
 
         private bool _nsdb;
         private string _account;
@@ -39,7 +40,12 @@ namespace Novusphere.EOS
             _postStateCollection = _owner.Config.Collections[2];
             _postVoteCollection = _owner.Config.Collections[3];
 
-
+            _dbh = new DBHelper(db)
+            {
+                AccountCollection = _accountCollection.Name,
+                PostStateCollection = _postStateCollection.Name
+            };
+            
             if (action != null)
             {
                 var action_account = (string)action["account"];
@@ -61,103 +67,7 @@ namespace Novusphere.EOS
             }
         }
 
-        public Dictionary<string, object> Filter(string key, object value)
-        {
-            return new Dictionary<string, object>()
-                    {
-                        { key, value }
-                    };
-        }
 
-        public dynamic FindOrCreate(string table, Dictionary<string, object> filter, Func<JObject> create = null)
-        {
-            BsonDocument cmd;
-
-            try
-            {
-                cmd = RunCommand(new
-                {
-                    find = table,
-                    limit = 1,
-                    filter = filter
-                });
-
-                return BsonToJson(cmd["cursor"]["firstBatch"][0]);
-            }
-            catch
-            {
-                if (create == null)
-                    return null;
-
-                var value = create();
-           
-                cmd = RunCommand(new
-                {
-                    insert = table,
-                    documents = new object[] { value }
-                });
-
-                return value;
-            }
-        }
-
-        public void Update(string table, JObject[] values, Func<JObject, object> q)
-        {
-            var cmd = RunCommand(new
-            {
-                update = table,
-                updates = values.Select(a => new
-                {
-                    q = q(a),
-                    u = a
-                })
-            });
-        }
-
-        public void UpdateAccounts(params JObject[] accounts)
-        {
-            Update(_accountCollection.Name, 
-                accounts, 
-                (o) => new { name = o["name"].ToObject<string>() });
-        }
-
-        public void UpdatePostStates(params JObject[] threads)
-        {
-            Update(_postStateCollection.Name, 
-                threads, 
-                (o) => new { txid = o["txid"].ToObject<string>() });
-        }
-
-        public dynamic FindOrCreateAccount(string name, bool create = true)
-        {
-            Func<JObject> creator = () =>
-            {
-                var value = new JObject();
-                value["name"] = name;
-                value["state"] = new JObject();
-                return value;
-            };
-
-            return FindOrCreate(_accountCollection.Name, 
-                Filter(nameof(name), name), 
-                create ? creator : null);
-        }
-
-        public dynamic FindOrCreatePostState(string txid, bool create = true)
-        {
-            Func<JObject> creator = () =>
-            {
-                var value = new JObject();
-                value["txid"] = txid;
-                value["up"] = 0;
-                value["up_atmos"] = 0;
-                return value;
-            };
-
-            return FindOrCreate(_postStateCollection.Name, 
-                Filter(nameof(txid), txid), 
-                create ? creator : null);
-        }
 
         private void AccountState()
         {
@@ -165,7 +75,7 @@ namespace Novusphere.EOS
                 throw new StateHandlerException(nameof(AccountState), "expected JObject data");
 
             var state_delta = (JObject)_data;
-            var account = FindOrCreateAccount(_account);
+            var account = _dbh.FindOrCreateAccount(_account);
 
             // update account state
             foreach (var field in state_delta)
@@ -177,7 +87,7 @@ namespace Novusphere.EOS
                 });
             }
 
-            UpdateAccounts(account);
+            _dbh.UpdateAccounts(account);
         }
         
         private void ForumVote()
@@ -190,7 +100,7 @@ namespace Novusphere.EOS
                 return;
 
             // no creator set, so will return null if not found
-            var existingVote = FindOrCreate(_postVoteCollection.Name,
+            var existingVote = _dbh.FindOrCreate(_postVoteCollection.Name,
                 new Dictionary<string, object>()
                 {
                     { "account",  _account },
@@ -203,16 +113,16 @@ namespace Novusphere.EOS
             }
 
             // add vote
-            existingVote = RunCommand(new
+            existingVote = _dbh.RunCommand(new
             {
                 insert = _postVoteCollection.Name,
                 documents = new object[] { new { account = _account, txid = txid } }
             });
 
             // update thread with vote
-            var state = FindOrCreatePostState(txid);
+            var state = _dbh.FindOrCreatePostState(txid);
             state.up = (int)state.up + 1;
-            UpdatePostStates(state);
+            _dbh.UpdatePostStates(state);
         }
 
         private dynamic GetTransaction(string txid)
@@ -258,7 +168,7 @@ namespace Novusphere.EOS
                     var post_txid = memo.Remove(0, 11);
                     var atmos = double.Parse(((string)_data.data.quantity).Split(' ')[0]);
 
-                    var state = FindOrCreatePostState(post_txid, false);
+                    var state = _dbh.FindOrCreatePostState(post_txid, false);
                     if (state == null)
                         return;
 
@@ -293,7 +203,7 @@ namespace Novusphere.EOS
 
                     double? up_atmos = (double?)state.up_atmos;
                     state.up_atmos = ((up_atmos != null) ? (double)up_atmos : 0) + ((atmos * 2) / UPVOTE_ATMOS_RATE);
-                    UpdatePostStates(state);
+                    _dbh.UpdatePostStates(state);
                 }
             }
         }

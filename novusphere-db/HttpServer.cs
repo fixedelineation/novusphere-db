@@ -43,6 +43,10 @@ namespace Novusphere.Database
             try
             {
                 var context = _listener.EndGetContext(result);
+
+                if (_listener.IsListening)
+                    _listener.BeginGetContext(GetContext, null);
+
                 var handler = new HttpContextHandler(context, GetSession(context));
                 handler.Handle();
             }
@@ -50,9 +54,6 @@ namespace Novusphere.Database
             {
                 // ...
             }
-
-            if (_listener.IsListening)
-                _listener.BeginGetContext(GetContext, null);
         }
 
         public void Stop()

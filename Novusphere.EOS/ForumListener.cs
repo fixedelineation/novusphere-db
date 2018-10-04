@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Linq;
 using System.Net;
 using System.IO;
@@ -8,6 +9,7 @@ using MongoDB.Driver;
 using MongoDB.Bson;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Novusphere.Shared;
 
 namespace Novusphere.EOS
 {
@@ -15,10 +17,28 @@ namespace Novusphere.EOS
     {
         public const int LAST_EOSFORUMTEST_ACTION = 295201687;
 
-        public ForumListener(ContractListenerConfig config) 
+        public ForumListener(ContractListenerConfig config)
             : base(config)
         {
 
+        }
+
+        public override object HandleHttp(IMongoDatabase db, string path, string content, out bool match)
+        {
+            match = false;
+
+            if (Regex.IsMatch(path, "\\/eosforum\\/tx\\/.+"))
+            {
+                match = true;
+
+                var _db = new DBHelper(db);
+                return _db.FindOrCreate(Config.Collections[0].Name, new Dictionary<string, object>()
+                {
+                    { "transaction", path.Split('/')[3] }
+                });
+            }
+
+            return null;
         }
 
         public override void Start(IMongoDatabase db)
@@ -30,7 +50,7 @@ namespace Novusphere.EOS
                 var snapshot_fp = Path.Combine("default", "forum-snapshot.json");
                 if (File.Exists(snapshot_fp))
                     File.Delete(snapshot_fp);
-                
+
                 Console.WriteLine("Downloading recent forum snapshot...");
                 var wc = new WebClient();
                 wc.DownloadFile("https://cdn.novusphere.io/static/snapshot/eosforum.json", snapshot_fp);
