@@ -84,6 +84,60 @@ namespace Novusphere.EOS
             }
         }
 
+        protected override void BeforeAddDocument(IMongoDatabase db, object _document)
+        {
+            dynamic action = _document;
+            string action_name = (string)action.name;
+            if (action_name == "post" && (int)action.createdAt >= 1538136731) // this is when tags were introduced
+            {
+                // parse tags into field
+                var content = (string)action.data.content;
+                if (content != null)
+                {
+                    var rx = new Regex("\\B(\\\\)?#([a-zA-Z0-9_]+)\\b");
+                    var tags = rx.Matches(content).Select(m => m.Value.Substring(1)).ToHashSet();
+                    if (tags.Count > 0)
+                    {
+                        var json_metadata = action.data.json_metadata;
+                        bool? edit = (bool?)json_metadata.edit;
+                        if (edit != null && edit.Value)
+                        {
+                            var dbh = new DBHelper(db);
+                            var parent = dbh.FindOrCreate(Config.Collections[0].Name, new Dictionary<string, object>()
+                            {
+                                { "data.poster", (string)action.data.poster },
+                                { "data.post_uuid", (string)json_metadata.parent_uuid }
+                            });
+
+                            if (parent != null) // merge tags with parent
+                            {
+                                var p_tags = (JArray)parent.data.tags;
+                                if (p_tags != null)
+                                {
+                                    foreach (var p_tag in p_tags)
+                                        tags.Add(p_tag.ToObject<string>());
+                                }
+
+                                // only commit update if there has been new tags added
+                                if (p_tags == null || tags.Count > p_tags.Count)
+                                {
+                                    parent.data.tags = JArray.FromObject(tags);
+                                    dbh.Update(Config.Collections[0].Name, new JObject[] { parent },
+                                        (o) => new { transaction = o["transaction"].ToObject<string>() });
+                                }
+                            }
+                        }
+                        else
+                        {
+                            action.data.tags = JArray.FromObject(tags);
+                        }
+                    }
+                }
+            }
+
+            base.BeforeAddDocument(db, _document);
+        }
+
         protected override void ProcessAction(dynamic action)
         {
             string action_account = (string)action.account;

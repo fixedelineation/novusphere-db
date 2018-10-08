@@ -24,7 +24,8 @@
               "transaction",
               "data.json_metadata.sub",
               "data.post_uuid",
-              "data.reply_to_post_uuid"
+              "data.reply_to_post_uuid",
+              "data.tags"
             ],
             "Descending": [
               "createdAt"
