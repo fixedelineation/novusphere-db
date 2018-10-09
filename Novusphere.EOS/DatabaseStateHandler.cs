@@ -172,38 +172,50 @@ namespace Novusphere.EOS
                     if (state == null)
                         return;
 
+                    int mult = 0;
+
                     try
                     {
-                        // verify upvoter also paid the poster...
-
-                        // TO-DO: tidy up...
-
                         dynamic tx = GetTransaction((string)_data.transaction);
                         IEnumerable<dynamic> actions = tx.trx.trx.actions;
-                        if (actions.Count() != 2)
+                        if (actions.Count() > 2)
                             return;
-
+                        
                         var tip = actions.FirstOrDefault();
                         if (tip.account != "novusphereio" || tip.name != "transfer")
                             return;
-
                         if ((string)tip.data.quantity != (string)_data.data.quantity)
                             return;
 
                         dynamic tx2 = GetTransaction((string)post_txid);
                         dynamic auth = tx2.trx.trx.actions[0].authorization[0];
 
-                        if ((string)tip.data.to != (string)auth.actor) // tip to poster
-                            return;
+                        if (actions.Count() == 2)
+                        {
+                            if ((string)tip.data.to != (string)auth.actor) // tip to poster
+                                return;
+
+                            mult = 2;
+                        }
+                        else if (actions.Count() == 1)
+                        {
+                            if ((string)tip.data.from != (string)auth.actor) // self upvote
+                                return;
+
+                            mult = 1;
+                        }
                     }
                     catch (Exception ex)
                     {
                         // allow pass...
                     }
 
-                    double? up_atmos = (double?)state.up_atmos;
-                    state.up_atmos = ((up_atmos != null) ? (double)up_atmos : 0) + ((atmos * 2) / UPVOTE_ATMOS_RATE);
-                    _dbh.UpdatePostStates(state);
+                    if (mult > 0)
+                    {
+                        double? up_atmos = (double?)state.up_atmos;
+                        state.up_atmos = ((up_atmos != null) ? (double)up_atmos : 0) + ((atmos * mult) / UPVOTE_ATMOS_RATE);
+                        _dbh.UpdatePostStates(state);
+                    }
                 }
             }
         }
