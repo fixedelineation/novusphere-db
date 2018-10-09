@@ -95,7 +95,7 @@ namespace Novusphere.EOS
                 if (content != null)
                 {
                     var rx = new Regex("\\B(\\\\)?#([a-zA-Z0-9_]+)\\b");
-                    var tags = rx.Matches(content).Select(m => m.Value.Substring(1)).ToHashSet();
+                    var tags = rx.Matches(content).Select(m => m.Value.Substring(1).ToLower()).ToHashSet();
                     if (tags.Count > 0)
                     {
                         var json_metadata = action.data.json_metadata;
