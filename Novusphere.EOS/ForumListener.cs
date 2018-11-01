@@ -98,6 +98,8 @@ namespace Novusphere.EOS
                     var tags = rx.Matches(content).Select(m => m.Value.Substring(1).ToLower()).ToHashSet();
                     if (tags.Count > 0)
                     {
+			action.data.tags = JArray.FromObject(tags);
+
                         var json_metadata = action.data.json_metadata;
                         bool? edit = (bool?)json_metadata.edit;
                         if (edit != null && edit.Value)
@@ -126,10 +128,6 @@ namespace Novusphere.EOS
                                         (o) => new { transaction = o["transaction"].ToObject<string>() });
                                 }
                             }
-                        }
-                        else
-                        {
-                            action.data.tags = JArray.FromObject(tags);
                         }
                     }
                 }
