@@ -30,7 +30,7 @@ namespace Novusphere.EOS
 
     public class ContractListener : IBlockchainListener
     {
-        public const int ITEMS_PER_PAGE = 25;
+        public const int ITEMS_PER_PAGE = 100;
 
         public ContractListenerConfig Config { get; private set; }
         public MongoCollectionConfig Collection { get; private set; }
@@ -49,6 +49,11 @@ namespace Novusphere.EOS
         }
 
         public virtual void Start(IMongoDatabase db)
+        {
+            SetRecent(db);
+        }
+
+        protected void SetRecent(IMongoDatabase db)
         {
             var collection = db.GetCollection<BsonDocument>(Collection.Name);
 

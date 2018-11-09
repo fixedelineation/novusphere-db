@@ -33,7 +33,7 @@
           }
         }
       ],
-      "Contract": "eosforumdapp",
+      "Contract": "eosforumrcpp",
       "JsonParse": [
         {
           "Name": "post",

@@ -16,6 +16,7 @@ namespace Novusphere.EOS
     public class ForumListener : ContractListener
     {
         public const int LAST_EOSFORUMTEST_ACTION = 295201687;
+        public const int LAST_EOSFORUMDAPP_ACTION = 1335182167;
 
         public ForumListener(ContractListenerConfig config)
             : base(config)
@@ -73,10 +74,12 @@ namespace Novusphere.EOS
                     var result = db.RunCommand<BsonDocument>(command);
                 }
 
-                LastTxId = LAST_EOSFORUMTEST_ACTION;
+                SetRecent(db);
             }
 
-            if (LastTxId == LAST_EOSFORUMTEST_ACTION) // migrate to new contract
+            // migrate to new contract
+            if (LastTxId == LAST_EOSFORUMTEST_ACTION ||
+                LastTxId == LAST_EOSFORUMDAPP_ACTION)
             {
                 LastTx = null;
                 LastTxId = 0;
