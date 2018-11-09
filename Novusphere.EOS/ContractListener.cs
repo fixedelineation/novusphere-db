@@ -30,7 +30,7 @@ namespace Novusphere.EOS
 
     public class ContractListener : IBlockchainListener
     {
-        public const int ITEMS_PER_PAGE = 100;
+        public const int ITEMS_PER_PAGE = 50;
 
         public ContractListenerConfig Config { get; private set; }
         public MongoCollectionConfig Collection { get; private set; }
